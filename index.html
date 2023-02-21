@@ -65,6 +65,8 @@
 				margin: 0;
 				padding: 0;
 
+				box-sizing: border-box;
+
 				overflow: hidden;
 			}
 
@@ -81,9 +83,10 @@
 				background: inherit;
 			}
 
-			container,
+			body > container,
 			loader,
-			noscript {
+			noscript,
+			canvas {
 				position: fixed;
 				top: 0;
 				left: 0;
@@ -97,34 +100,72 @@
 				height: 100%;
 
 				background: inherit;
+			}
 
+			loader,
+			noscript {
 				font-size: 2rem;
 				font-weight: bold;
 				font-weight: 600;
 			}
 
-			container .input {
+			body > container .input {
 				display: block;
 
-				width: max-content;
-				height: fit-content;
+				min-width: 5rem;
+				max-width: 80vw;
 
-				background: #000009;
+				background: #333;
 
 				color: #CCC;
 				font-size: 1.1rem;
 				font-weight: 500;
+				white-space: nowrap;
 
-				border: none;
+				border: 0.1rem solid transparent;
 				border-radius: 1rem;
 				
 				cursor: text;
 
 				padding: 1rem 0.8rem;
+
+				overflow: scroll;
+
+				transition: border-color 0.2s linear;
 			}
 
-			container .input::selection {
-				background: #444;
+			body > container .input:focus,
+			body > container .input:hover{
+				border-color: #FFF;
+			}
+
+			body > container .input::selection {
+				background: #555;
+
+				color: #FFF;
+			}
+
+			body > container button {
+				display: block;
+
+				background: #FFF;
+
+				color: #000;
+				font-size: 1.2rem;
+
+				border: 0.1rem solid #FFF;
+				border-radius: 0.4rem;
+
+				margin-top: 0.5rem;
+				padding: 0.2rem 0.7rem;
+
+				cursor: pointer;
+
+				transition: background-color 0.2s linear, color 0.2s linear;
+			}
+
+			body > container button:hover {
+				background: #333;
 
 				color: #FFF;
 			}
@@ -133,12 +174,57 @@
 				z-index: 1;
 			}
 
+			loader#loading container {
+				display: block;
+
+				width: min(30rem,90%);
+				height: 1.5rem;
+
+				background: #000;
+
+				border: 0.1rem solid #FFF;
+				border-radius: 1rem;
+
+				padding: 0.1rem;
+			}
+
+			loader#loading bar {
+				display: flex;
+				justify-content: left;
+				align-items: center;
+
+				width: max(0%,1rem);
+				height: 100%;
+
+				color: #000;
+				font-size: 0.5rem;
+
+				border: none;
+				border-radius: 1rem;
+
+				background: #FFF;
+
+				padding: 0.1rem;
+			}
+
+			loader#loading stats {
+				font-size: 1rem;
+				font-weight: normal;
+				font-weight: 400;
+
+				opacity: 0.8;
+			}
+
 			loader#connecting {
 				display: none;
 			}
 
 			noscript {
 				z-index: 2;
+			}
+
+			canvas {
+				background: #000;
 			}
 		</style>
 
@@ -153,6 +239,18 @@
 		<loader id="loading">
 
 			Loading...
+
+			<container>
+				
+				<bar>0.0%</bar>
+
+			</container>
+
+			<stats>
+				
+				<count>0</count>/<max>0</max> elements loaded
+
+			</stats>
 
 		</loader>
 
