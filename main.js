@@ -1,22 +1,15 @@
 import { io } from "https://cdn.socket.io/4.5.4/socket.io.esm.min.js";
-import { makeServerUrl, storage, validateServerUrl } from "./utils.js";
 import { loadSounds } from "./sounds.js";
+import { makeServerUrl, storage, validateServerUrl } from "./utils.js";
 
-//window.actx = new (window.webkitAudioContext || AudioContext)();
-const actx = new AudioContext();
-actx.createPanner = () => new PannerNode(actx,{
-	coneInnerAngle: 360,
-	coneOuterAngle: 0,
-	coneOuterGain: 0,
-	distanceModel: "linear",
-	maxDistance: 20,
-	panningModel: "HRTF",
-	refDistance: 2,
-	rolloffFactor: 1
-});
+window.actx = new (window.webkitAudioContext || AudioContext)();
+actx.createPanner = () => new PannerNode(actx,{coneInnerAngle:360,coneOuterAngle:0,coneOuterGain:0,distanceModel:"linear",maxDistance:20,panningModel:"HRTF",refDistance:2,rolloffFactor:1});
+window.gain = actx.createGain();
+gain.connect(actx.destination);
 
+window.connections = {};
 window.ping = "xx ms";
-window.Users = {};
+window.users = {};
 
 let s;
 try {
@@ -57,6 +50,7 @@ document.getElementById("connect").addEventListener("click",() => {
 			}
 		})
 		.then((stream) => window.stream = stream)
+		.catch((e) => console.warn("Failed to get user's microphone stream",e))
 		.finally(() => {
 			window.socket = io(url,{
 				path: "/ws",
@@ -76,51 +70,95 @@ document.getElementById("connect").addEventListener("click",() => {
 
 const start = () => {
 	if (window.stream) {
-		let chunks = [];
+		socket.on("signal",async (id,state,...args) => {
+			const setup = () => {
+				if (connections[id]) {
+					delete connections[id];
+				}
 
-		const recorder = new MediaRecorder(window.stream);
-		recorder.addEventListener("dataavailable",(e) => chunks.push(e.data));
-		recorder.addEventListener("stop",async () => {
-			socket.emit("voice",new Blob(chunks));
+				connections[id] = new RTCPeerConnection({
+					iceServers: [
+						{
+							urls: "stun:relay.metered.ca:80"
+						},{
+							urls: "turn:relay.metered.ca:80",
+							username: "3b6ed9a89108eb16e9e86857",
+							credential: "eOOCe7fIBw+uDV8C"
+						},{
+							urls: "turn:relay.metered.ca:443",
+							username: "3b6ed9a89108eb16e9e86857",
+							credential: "eOOCe7fIBw+uDV8C"
+						},{
+							urls: "turn:relay.metered.ca:443?transport=tcp",
+							username: "3b6ed9a89108eb16e9e86857",
+							credential: "eOOCe7fIBw+uDV8C"
+						}
+					]
+				});
 
-			chunks = [];
-		});
+				connections[id].stream = new MediaStream();
 
-		const record = () => {
-			if (recorder.state === "recording") {
-				recorder.stop();
+				connections[id].addEventListener("icecandidate",(e) => {
+					if (e.candidate) {
+						socket.emit("signal",id,3);
+					}
+				});
+
+				connections[id].addEventListener("track",(e) => {
+					connections[id].stream.addTrack(e.track);
+
+					if (!connections[id].source) {
+						connections[id].source = actx.createMediaStreamSource(connections[id].stream);
+						connections[id].source.connect(connections[id].gain);
+					}
+				});
+
+				for (let track of stream.getAudioTracks()) {
+					connections[id].addTrack(track);
+				}
+
+				connections[id].gain = actx.createGain();
+				connections[id].panner = actx.createPanner();
+
+				connections[id].gain.connect(connections[id].panner);
+				connections[id].panner.connect(gain);
+			};
+
+			switch (state) {
+				case 0:
+					setup();
+
+					const offer = await connections[id].createOffer();
+					connections[id].setLocalDescription(offer);
+
+					socket.emit("signal",id,1,offer);
+					break;
+
+				case 1:
+					setup();
+
+					connections[id].setRemoteDescription(args[0]);
+
+					const answer = await connections[id].createAnswer();
+					connections[id].setLocalDescription(answer);
+
+					socket.emit("signal",id,2,answer);
+					break;
+
+				case 2:
+					connections[id].setRemoteDescription(args[0]);
+					break;
+
+				case 3:
+					connections[id].addIceCandidate(args[0]).catch((e) => console.warn("Failed to add ICE candidate:",e));
+					break;
 			}
-			
-			recorder.start();
-
-			requestAnimationFrame(record);
-		};
-
-		record();
+		});
 	}
 
 
 	socket.on("list",(list) => {
 		window.users = list;
-	});
-
-	socket.on("voice",async (id,data) => {
-		const user = (window.users || {})[id];
-
-		if (typeof user === "object" && data instanceof ArrayBuffer) {
-			const panner = actx.createPanner();
-			panner.positionX.setValueAtTime(user.position.x,actx.currentTime);
-			panner.positionY.setValueAtTime(user.position.y,actx.currentTime);
-			panner.positionZ.setValueAtTime(user.position.z,actx.currentTime);
-			panner.connect(actx.destination);
-
-			const buffer = await actx.decodeAudioData(data);
-			
-			const source = actx.createBufferSource();
-			source.buffer = buffer;
-			source.connect(panner);
-			source.start();
-		}
 	});
 
 	document.body.innerHTML = "<canvas></canvas>";
